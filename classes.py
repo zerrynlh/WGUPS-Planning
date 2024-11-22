@@ -92,7 +92,10 @@ class Truck:
         self.traveled += distance
         self.set_location('4001 South 700 East')
 
-        print(f"Truck {self.truck_id} returned to the HUB at {self.current_time.time()}")
+        if self.delivered > 0:
+            print(f"Truck {self.truck_id} returned to the HUB at {self.current_time.time()}")
+        else:
+            print(f"Truck {self.truck_id} remains at the HUB.")
 
     def __repr__(self):
         return f"""
