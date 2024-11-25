@@ -20,63 +20,59 @@ def get_note(the_note):
     else:
         return str(the_note)
     
-def find_package(package_queue, target_id):
-    """O(N)"""
-    for priority, package_id, package in package_queue:
-        if package_id == target_id:
-            return True
-    return False
+def insert_package(package_table, package):
+    """ O(1) time complexity """
+    package_table[package.package_id] = package
+
+def lookup_package(package_table, package_id):
+    """ O(1) time complexity """
+    result = package_table.get(package_id, "Package not found")
+    print(result)
     
-def load_packages(truck, the_queue, current_time):
-    """While loop is O(N) complexity"""
-    # Place to store deferred packages
-    deferred_packages = []
+def find_package(pk_table, target_id):
+    """O(1)"""
+    try:
+        the_pkg = pk_table[target_id]
+        return the_pkg.get_pickup_status()
+    except KeyError:
+        return None
+    
+def load_packages(truck, the_queue):
+    """O(N) complexity"""
+    for package_id, package in the_queue.items():
 
-    while len(truck.packages) < 16 and the_queue:
-        package_p, id, package = heapq.heappop(the_queue)
+        if truck.get_num_packages() >= 16:
+            break
+        if package.check_status() == "At hub":
+            # Address update for package 9
+            if package.package_id == 9 and truck.current_time >= datetime.strptime("10:20 AM", "%I:%M %p"):
+                package.address == "401 S State St"
+                package.zip_code == 84111
 
-        # Address update for package 9
-        if package.package_id == 9 and truck.current_time >= datetime.strptime("10:20 AM", "%I:%M %p"):
-            package.address == "401 S State St"
-            package.zip_code == 84111
-
-        # Constraints
-        if package.note and "Can only be on truck 2" in package.note and truck.truck_id != 2:
-            # Reinsert package if not on truck 2
-            if package not in [pkg[2] for pkg in deferred_packages]:
-                deferred_packages.append((package_p, id, package))
+            # Constraints
+            if package.note and "Can only be on truck 2" in package.note and truck.truck_id != 2:
                 continue
-        if package.note and "Delayed on flight" in package.note and truck.current_time < datetime.strptime("9:05 AM", "%I:%M %p"):
-            # Delay package until 9:05 AM
-            if package not in [pkg[2] for pkg in deferred_packages]:
-                deferred_packages.append((package_p, id, package))
+            if package.note and "Delayed on flight" in package.note and truck.current_time < datetime.strptime("9:05 AM", "%I:%M %p"):
+                # Delay package until 9:05 AM
                 continue
-        if package.package_id == 9 and truck.current_time < datetime.strptime("10:20 AM", "%I:%M %p"):
-            # Defer package #9 until 10:20AM for correct address
-            if package not in [pkg[2] for pkg in deferred_packages]:
-                deferred_packages.append((package_p, id, package))
+            if package.package_id == 9 and truck.current_time < datetime.strptime("10:20 AM", "%I:%M %p"):
+                # Defer package #9 until 10:20AM for correct address
                 continue
-        if package.package_id in [13, 14, 15, 16, 18, 19, 20, 36, 38] and truck.truck_id != 2:
+            if package.package_id in [13, 14, 15, 16, 18, 19, 20, 36, 38] and truck.truck_id != 2:
             # Ensure packages are delivered together and for packages that can only be on truck 2
-            if package not in [pkg[2] for pkg in deferred_packages]:
-                deferred_packages.append((package_p, id, package))
                 continue
 
-        # Load package onto truck
-        truck.load_package(package)
-        truck.delivered += 1
+            # Load package onto truck
+            if truck.get_num_packages() < 16:
+                cur_truck_time = truck.current_time
+                package.pickup_time = cur_truck_time
+                package.truck_id = truck.truck_id
+                truck.load_package(package)
+                truck.delivered += 1
 
-        #print(f"""Loading truck {truck.truck_id}. Current packages: {truck.get_num_packages()}. 
-              #Most recent package ID: {package.package_id}""")
-
-    # Reinsert deferred packages 
-    """O(log N)"""
-    for package_p, id, package in deferred_packages:
-        heapq.heappush(the_queue, (package_p, id, package))
-
-        #print(f"""Loading truck {truck.truck_id} with deferred packages. Current packages: {truck.get_num_packages()}. 
-              #Most recent package ID: {package.package_id}""")
+            #print(f"""Loading package {package.package_id} onto truck {truck.truck_id} at {cur_truck_time.time()}""")
     
+# Select next package using greedy approach based on priority then distance   
 def select_next_package(truck, dist_table):
     """O(N) complexity"""
     current_location = truck.get_location()
@@ -85,6 +81,7 @@ def select_next_package(truck, dist_table):
     highest_priority = float('inf')
 
     for package in truck.packages:
+        package = package[2]
         # Account for blank values
         try:
             distance = dist_table[current_location][package.address]
@@ -109,7 +106,7 @@ def select_next_package(truck, dist_table):
 
     return nearest_package
 
-def deliver_package(truck, package, dist_table):
+def deliver_package(truck, package, dist_table, package_table):
     """O(1) complexity, all constant time operations and no loops"""
     # Account for blank values
     try:
@@ -127,71 +124,133 @@ def deliver_package(truck, package, dist_table):
     truck.set_time(timedelta(hours=travel_time))
     truck.traveled += distance
 
-    truck.drop_off_package(package, truck.current_time)
+    #Update package status in hast table
+    cur_time = truck.current_time
+    package_table[package.package_id].set_dropoff_time(cur_time)
+    package_table[package.package_id].set_status("Delivered")
+
+    truck.drop_off_package(package, cur_time)
     truck.set_location(package.address)
 
-    print(f"""Truck {truck.truck_id} delivered package {package.package_id} to {package.address} at {truck.current_time.time()}.""")
+    #print(f"""Truck {truck.truck_id} delivered package {package.package_id} to {package.address} at {truck.current_time.time()}.""")
 
-def greedy_delivery_algorithm(package_queue, distance_table):
+def greedy_delivery_algorithm(package_queue, distance_table, trucks, time = None):
     """Process consist of:
         O(N) for first loop
         O(N^2) for second loop
         O(N) for the third loop
         O(N) for the 4th and 5th while loop
         Making this function O(N^2) time complexity"""
-    # Create trucks
-    trucks = [Truck(1, datetime.strptime("8:00 AM", "%I:%M %p")),
-              Truck(2, datetime.strptime("8:00 AM", "%I:%M %p"))]
+    
+    # Get time input from UI
+    if time:
+        trucks = [
+        Truck(1, datetime.strptime("8:00 AM", "%I:%M %p")),
+        Truck(2, datetime.strptime("8:00 AM", "%I:%M %p")),
+        Truck(3, datetime.strptime("8:00 AM", "%I:%M %p")),
+    ]
+        try:
+            time_object = datetime.strptime(time, "%I:%M %p")
+            time_object = time_object.time()
+        except ValueError:
+        # Handle incorrect input format
+            print("Invalid time format. Please enter a time in the format 'HH:MM AM/PM'.")
 
     # Load packages onto trucks
-    for truck in trucks:
-        load_packages(truck, package_queue, truck.current_time)
+    for truck in trucks[:2]:
+        load_packages(truck, package_queue)
+
+    # If a time was entered, store packages not on trucks for printing status
+    on_truck = []
 
     # Deliver packages using a greedy approach
-    for truck in trucks:
+    for truck in trucks[:2]:
         while truck.packages and truck.traveled < 140:
             # Greedy selection logic based on distance
 
-            # If it is past 9:05 AM and packages 6 and 25 are at the HUB, return to the hub
-            if truck.current_time >= datetime.strptime("9:05 AM", "%I:%M %p") and (find_package(package_queue, 6) or find_package(package_queue, 25)):
-                if truck.truck_id == 2:
-                    truck.return_to_hub(truck.current_location, distance_table)
-                    load_packages(truck, package_queue, truck.current_time)
-            # If it is past 10:20 AM and package 9 is at the hub, return to HUB
-            if truck.current_time >= datetime.strptime("10:20 AM", "%I:%M %p") and find_package(package_queue, 9):
-                if truck.truck_id == 2:
-                    truck.return_to_hub(truck.current_location, distance_table)
-                    load_packages(truck, package_queue, truck.current_time)
-            next_package = select_next_package(truck, distance_table)
-            deliver_package(truck, next_package, distance_table)
+            # Check if query_time is reached for the current truck
+            if time and truck.current_time.time() >= time_object:
+                for i, j, pkg in truck.packages:
+                    print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
+                    on_truck.append(pkg.package_id) # Add package ID to list of picked up packages
+                break  # Stop this truck's deliveries, but continue with the other trucks
 
+            # If it is past 9:05 AM and packages 6 and 25 are at the HUB, return to the hub
+            if truck.current_time >= datetime.strptime("9:05 AM", "%I:%M %p") and (find_package(package_queue, 6) == False or find_package(package_queue, 25) == False):
+                if truck.truck_id == 2:
+                    truck.return_to_hub(truck.current_location, distance_table)
+                    load_packages(truck, package_queue)
+            # If it is past 10:20 AM and package 9 is at the hub, return to HUB
+            if truck.current_time >= datetime.strptime("10:20 AM", "%I:%M %p") and find_package(package_queue, 9) == False:
+                if truck.truck_id == 2:
+                    truck.return_to_hub(truck.current_location, distance_table)
+                    load_packages(truck, package_queue)
+            next_package = select_next_package(truck, distance_table)
+            deliver_package(truck, next_package, distance_table, package_queue)
         # Return to hub if no packages on the truck
         truck.return_to_hub(truck.current_location, distance_table)
 
     # Get most recent truck that returned
     truck_time = datetime.strptime("5:00 PM", "%I:%M %p")
-    for i in trucks:
-        if i.current_time < truck_time:
-            truck_time = i.current_time
+    for truck in trucks[:2]:
+        if truck.current_time < truck_time:
+            truck_time = truck.current_time
 
     # Set truck 3's depart time to most recent truck's arrival
     truck_3_depart_time = datetime.combine(datetime.today(), truck_time.time())
-    truck_3 = Truck(3, truck_3_depart_time)
+    truck_3 = trucks[2]
+    truck_3.current_time = truck_3_depart_time
 
     # Begin loading truck 3
-    while package_queue:
-        load_packages(truck_3, package_queue, truck_3.current_time)
+    if not trucks[0].packages and trucks[1].packages:
+        load_packages(truck_3, package_queue)
 
     while truck_3.packages:
+        if time and trucks[2].current_time.time() >= time_object and truck_3.packages:
+            for i, j, pkg in truck_3.packages:
+                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
+                on_truck.append(pkg.package_id) # Add package ID to list of picked up packages
+            break
+
         next_package = select_next_package(truck_3, distance_table)
+        print("we outchea")
         deliver_package(truck_3, next_package, distance_table)
+
+    # If a time was entered and there are remaining packages that are not on trucks, print them
+    if time:
+        for id, pkg in package_queue.items():
+            if id not in on_truck:
+                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
+        return
 
     truck_3.return_to_hub(truck_3.current_location, distance_table)
 
-    print("Remaining packages:", len(package_queue))
+    print("Remaining packages:", (sum(i.get_num_packages() for i in trucks)))
     print("Final truck stats:")
 
     # Print final truck stats
-    for a_truck in [trucks[0], trucks[1], truck_3]:
+    for a_truck in trucks:
         print(a_truck)
 
+# CLI to view package status and truck mileage
+def user_interface(package_table, dist_table, trucks):
+    while True:
+        print("\n1. Look up package")
+        print("2. View total truck mileage")
+        print("3. Check package status at a specific time")
+        print("4. Exit")
+        choice = input("Choose an option: ").strip()
+        if choice == "1":
+            package_id = int(input("Enter package ID: "))
+            lookup_package(package_table, package_id)
+        elif choice == "2":
+            print('\n')
+            total_miles = round(sum(truck.traveled for truck in trucks), 2)
+            print(f"Total truck mileage: {total_miles}")
+        elif choice == "3":
+            time_input = input("Enter a time (e.g., 10:00 AM): ")
+            greedy_delivery_algorithm(package_table, dist_table, trucks, time_input)
+        elif choice == "4":
+            break
+        else:
+            print("Invalid choice. Please try again.")

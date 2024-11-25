@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import heapq
 
 class Package:
     """
@@ -20,6 +21,9 @@ class Package:
         self.picked_up = False
         self.drop_off_time = None
         self.delivered = False
+        self.status = "At hub"
+        self.pickup_time = None
+        self.truck_id = "No truck assigned"
 
     def set_pickup_status(self, pickup_status):
         self.picked_up = pickup_status
@@ -27,7 +31,23 @@ class Package:
     def set_dropoff_time(self, time):
         self.drop_off_time = time
         self.delivered = True
+        self.status = "Delivered"
 
+    def set_status(self, status):
+        self.status = status
+
+    def check_status(self):
+        return self.status
+    
+    def get_pickup_status(self):
+        return self.picked_up
+    
+    def delivered_at(self):
+        if self.delivered == True:
+            return self.drop_off_time.time()
+        else:
+            return "Not yet delivered"
+            
     def __repr__(self):
         return f"""
                     ID: {self.package_id} 
@@ -35,6 +55,9 @@ class Package:
                     Deadline: {self.deadline} 
                     Weight: {self.weight}
                     Note: {self.note}
+                    Status: {self.check_status()}
+                    Loaded at: {self.pickup_time.time() if self.pickup_time else 'Not yet loaded'}
+                    Delivered at: {self.delivered_at()}
                 """
     
     # Used to compare packages with the same priority rating
@@ -59,17 +82,24 @@ class Truck:
     
     def load_package(self, package):
         if self.get_num_packages() < 16:
-            self.packages.append(package)
             package.set_pickup_status(True)
+            package.set_status("En route")
+            heapq.heappush(self.packages, (package.priority, package.package_id, package))
         else:
             print(f"Truck {self.truck_id} is at full capacity. Cannot load more packages.")
 
     def drop_off_package(self, package, drop_off_time: datetime):
-        if package in self.packages:
-            package.set_dropoff_time(drop_off_time)
-            self.packages.remove(package)
-        else:
-            print(f"Package {package.package_id} is not on Truck {self.truck_id}.")
+        temp_heap = []
+            
+        while self.packages:
+            priority, package_id, pkg = heapq.heappop(self.packages)
+            if pkg == package:
+                pkg.set_dropoff_time(drop_off_time)
+                pkg.set_status("Delivered")
+            else:
+                heapq.heappush(temp_heap, (priority, package_id, pkg))
+
+        self.packages = temp_heap
 
     def set_location(self, loc):
         self.current_location = loc
