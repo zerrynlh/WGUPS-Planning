@@ -28,3 +28,5 @@ until 10:20 a.m.
 - The distances provided in the “WGUPS Distance Table” are equal regardless of the direction
 traveled.
 - The day ends when all 40 packages have been delivered.
+
+![UI](https://github.com/zerrynlh/WGUPS-Planning/blob/main/interface/UI.png)
