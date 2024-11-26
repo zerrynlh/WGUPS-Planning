@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
-import heapq
 from classes import Truck
+import csv
+from classes import Package
 
 def calculate_priority(deadline):
     """O(1) time complexity"""
@@ -134,7 +135,7 @@ def deliver_package(truck, package, dist_table, package_table):
 
     #print(f"""Truck {truck.truck_id} delivered package {package.package_id} to {package.address} at {truck.current_time.time()}.""")
 
-def greedy_delivery_algorithm(package_queue, distance_table, trucks, time = None):
+def greedy_delivery_algorithm(package_queue, distance_table, trucks, start_time = None, end_time = None):
     """Process consist of:
         O(N) for first loop
         O(N^2) for second loop
@@ -143,15 +144,15 @@ def greedy_delivery_algorithm(package_queue, distance_table, trucks, time = None
         Making this function O(N^2) time complexity"""
     
     # Get time input from UI
-    if time:
+    if start_time and end_time:
         trucks = [
         Truck(1, datetime.strptime("8:00 AM", "%I:%M %p")),
         Truck(2, datetime.strptime("8:00 AM", "%I:%M %p")),
         Truck(3, datetime.strptime("8:00 AM", "%I:%M %p")),
     ]
         try:
-            time_object = datetime.strptime(time, "%I:%M %p")
-            time_object = time_object.time()
+            start_time_obj = datetime.strptime(start_time, "%I:%M %p").time()
+            end_time_obj = datetime.strptime(end_time, "%I:%M %p").time()
         except ValueError:
         # Handle incorrect input format
             print("Invalid time format. Please enter a time in the format 'HH:MM AM/PM'.")
@@ -167,11 +168,13 @@ def greedy_delivery_algorithm(package_queue, distance_table, trucks, time = None
     for truck in trucks[:2]:
         while truck.packages and truck.traveled < 140:
             # Greedy selection logic based on distance
+            if end_time and truck.current_time.time() > end_time_obj:
+                break
 
             # Check if query_time is reached for the current truck
-            if time and truck.current_time.time() >= time_object:
+            if start_time and end_time and start_time_obj <= truck.current_time.time() <= end_time_obj:
                 for i, j, pkg in truck.packages:
-                    print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
+                    print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Deadline: {pkg.deadline}, Address: {pkg.address}")
                     on_truck.append(pkg.package_id) # Add package ID to list of picked up packages
                 break  # Stop this truck's deliveries, but continue with the other trucks
 
@@ -206,34 +209,33 @@ def greedy_delivery_algorithm(package_queue, distance_table, trucks, time = None
         load_packages(truck_3, package_queue)
 
     while truck_3.packages:
-        if time and trucks[2].current_time.time() >= time_object and truck_3.packages:
-            for i, j, pkg in truck_3.packages:
-                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
-                on_truck.append(pkg.package_id) # Add package ID to list of picked up packages
+        if end_time and trucks[2].current_time.time() > end_time_obj:
             break
 
+        if start_time and end_time and start_time_obj <= trucks[2].current_time.time() <= end_time_obj:
+            for i, j, pkg in truck_3.packages:
+                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Deadline: {pkg.deadline}, Address: {pkg.address}")
+                on_truck.append(pkg.package_id) # Add package ID to list of picked up packages
+
         next_package = select_next_package(truck_3, distance_table)
-        print("we outchea")
-        deliver_package(truck_3, next_package, distance_table)
+        deliver_package(truck_3, next_package, distance_table, package_queue)
 
     # If a time was entered and there are remaining packages that are not on trucks, print them
-    if time:
+    if start_time and end_time:
         for id, pkg in package_queue.items():
             if id not in on_truck:
-                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Address: {pkg.address}")
+                print(f"Package: {pkg.package_id}, Status: {pkg.status}, Truck: {pkg.truck_id}, Delivered at: {pkg.drop_off_time.time() if pkg.drop_off_time else 'Not delivered'}, Deadline: {pkg.deadline}, Address: {pkg.address}")
         return
 
     truck_3.return_to_hub(truck_3.current_location, distance_table)
 
-    print("Remaining packages:", (sum(i.get_num_packages() for i in trucks)))
+    print("Remaining packages to deliver:", (sum(i.get_num_packages() for i in trucks)))
     print("Final truck stats:")
-
-    # Print final truck stats
-    for a_truck in trucks:
-        print(a_truck)
+    for truck in trucks:
+        print(truck)
 
 # CLI to view package status and truck mileage
-def user_interface(package_table, dist_table, trucks):
+def user_interface(package_table, trucks):
     while True:
         print("\n1. Look up package")
         print("2. View total truck mileage")
@@ -248,9 +250,79 @@ def user_interface(package_table, dist_table, trucks):
             total_miles = round(sum(truck.traveled for truck in trucks), 2)
             print(f"Total truck mileage: {total_miles}")
         elif choice == "3":
-            time_input = input("Enter a time (e.g., 10:00 AM): ")
-            greedy_delivery_algorithm(package_table, dist_table, trucks, time_input)
+            # Reinitialize trucks without affecting main state
+            new_trucks = [
+                    Truck(1, datetime.strptime("8:00 AM", "%I:%M %p")),
+                    Truck(2, datetime.strptime("8:00 AM", "%I:%M %p")),
+                    Truck(3, datetime.strptime("8:00 AM", "%I:%M %p")),
+                ]
+            
+            while True:
+                start_input = input("Enter a start time (e.g., 10:00 AM): ")
+                try:
+                    start = datetime.strptime(start_input, "%I:%M %p").time()
+                    break
+                except ValueError:
+                    print("Please enter a valid start time.")
+
+            while True: 
+                end_input = input("Enter an end time (e.g., 12:00 PM): ")
+                try:
+                    end = datetime.strptime(end_input, "%I:%M %p").time()
+                    break
+                except ValueError:
+                    print("Please enter a valid end time.")
+                
+            print(f"Package status between {start_input} and {end_input}")
+            #Rerun simulation using time arguments and new package table and distance dictionary each time
+            greedy_delivery_algorithm(read_packages(), read_distance(), new_trucks, start_input, end_input)
         elif choice == "4":
             break
         else:
             print("Invalid choice. Please try again.")
+
+def read_distance():
+    # Read in distance table
+    with open ('distance_table.csv') as dist_table:
+        """O(N^2) complexity"""
+        dist_file = csv.reader(dist_table)
+
+        # Read the header rows and extract just the address
+        locations = [i.split('\n')[1].strip() for i in next(dist_file)[1:]]
+
+        # Initialize distance matrix
+        dist_dict = {loc: {} for loc in locations}
+        
+        # Populate the distance matrix
+        for row in dist_file:
+            # Split column locations by space to obtain address
+            current_location = row[0].replace(",", "").split("\n")[0].strip()
+            distances = []
+            for value in row[1:]:
+                if value is not None:
+                    distances.append(value)
+            dist_dict[current_location] = dict(zip(locations, distances))
+
+    # Correct address in dictionary
+    dist_dict['5383 South 900 East #104'] = dist_dict.pop('5383 S 900 East #104')
+
+    return dist_dict
+
+def read_packages():
+    # Initialize hash table for packages
+    package_table = {}
+
+    with open('package_file.csv') as package_file:
+        """O(N) complexity"""
+        csv_reader = csv.reader(package_file)
+        # Skip first empty row
+        next(csv_reader, None)
+        for row in csv_reader:
+            # Create Package object
+            new_package = Package(int(row[0]), row[1], row[2], row[3], int(row[4]), 
+                                row[5], float(row[6]), calculate_priority(row[5]), get_note(row[7]))
+            insert_package(package_table, new_package)
+
+    print(f"{len(package_table)} packages read.")
+
+    return package_table

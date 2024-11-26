@@ -52,7 +52,7 @@ class Package:
         return f"""
                     ID: {self.package_id} 
                     Address: {self.address}, {self.city}, {self.state}, {self.zip_code}
-                    Deadline: {self.deadline} 
+                    Delivery deadline: {self.deadline} 
                     Weight: {self.weight}
                     Note: {self.note}
                     Status: {self.check_status()}
@@ -122,10 +122,10 @@ class Truck:
         self.traveled += distance
         self.set_location('4001 South 700 East')
 
-        if self.delivered > 0:
-            print(f"Truck {self.truck_id} returned to the HUB at {self.current_time.time()}")
-        else:
-            print(f"Truck {self.truck_id} remains at the HUB.")
+        #if self.delivered > 0:
+            #print(f"Truck {self.truck_id} returned to the HUB at {self.current_time.time()}")
+        #else:
+            #print(f"Truck {self.truck_id} remains at the HUB.")
 
     def __repr__(self):
         return f"""
